@@ -1,6 +1,9 @@
 from django.db import models
+from common.models import BaseModel
+from users.models import CustomUser
 
-class Category(models.Model):
+
+class Category(BaseModel):
     name = models.CharField(max_length=255)
 
     def __str__(self):
@@ -9,14 +12,22 @@ class Category(models.Model):
     def products_count(self):
         return self.product_set.count()
 
-class Product(models.Model):
+
+class Product(BaseModel):
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     price = models.FloatField()
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    owner = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
 
     def __str__(self):
         return self.title
+
 
 class Review(models.Model):
     text = models.TextField()
