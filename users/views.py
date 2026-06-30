@@ -1,12 +1,13 @@
-from rest_framework.response import Response
+import random
+
+from django.contrib.auth import authenticate
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
+from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from .models import ConfirmationCode, CustomUser
 from .serializers import UserRegisterSerializer, UserAuthSerializer, ConfirmSerializer
-from django.contrib.auth.models import User
-from django.contrib.auth import authenticate
-from rest_framework.authtoken.models import Token
-from .models import ConfirmCode
-import random
 
 
 class RegistrationAPIView(GenericAPIView):
@@ -15,22 +16,23 @@ class RegistrationAPIView(GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
-            return Response(status=status.HTTP_400_BAD_REQUEST,
-                            data=serializer.errors)
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=serializer.errors)
 
-        username = serializer.validated_data.get('username')
+        email = serializer.validated_data.get('email')
         password = serializer.validated_data.get('password')
+        phone_number = serializer.validated_data.get('phone_number')
 
-        user = User.objects.create_user(
-            username=username,
+        user = CustomUser.objects.create_user(
+            email=email,
             password=password,
-            is_active=False
+            phone_number=phone_number,
+            is_active=False,
         )
 
         code = str(random.randint(100000, 999999))
-        ConfirmCode.objects.create(user=user, code=code)
+        ConfirmationCode.objects.create(user=user, code=code)
 
-        print(f'Код подтверждения для {username}: {code}')
+        print(f'Код подтверждения для {email}: {code}')
 
         return Response(
             status=status.HTTP_201_CREATED,
@@ -44,22 +46,21 @@ class AuthorizationAPIView(GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
-            return Response(status=status.HTTP_400_BAD_REQUEST,
-                            data=serializer.errors)
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=serializer.errors)
 
-        username = serializer.validated_data.get('username')
+        email = serializer.validated_data.get('email')
         password = serializer.validated_data.get('password')
 
-        user = authenticate(username=username, password=password)
+        user = authenticate(request, email=email, password=password)
 
         if user:
-            try:
-                token = Token.objects.get(user=user)
-            except:
-                token = Token.objects.create(user=user)
-            return Response(data={'key': token.key})
+            refresh = RefreshToken.for_user(user)
+            return Response(data={
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            })
 
-        return Response(status=status.HTTP_401_UNAUTHORIZED)
+        return Response(status=status.HTTP_401_UNAUTHORIZED, data={'error': 'Неверный email или пароль'})
 
 
 class ConfirmAPIView(GenericAPIView):
@@ -68,21 +69,23 @@ class ConfirmAPIView(GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
-            return Response(status=status.HTTP_400_BAD_REQUEST,
-                            data=serializer.errors)
+            return Response(status=status.HTTP_400_BAD_REQUEST, data=serializer.errors)
 
+        user_id = serializer.validated_data.get('user_id')
         code = serializer.validated_data.get('code')
 
         try:
-            confirm = ConfirmCode.objects.get(code=code)
-        except ConfirmCode.DoesNotExist:
-            return Response(status=status.HTTP_400_BAD_REQUEST,
-                            data={'error': 'Wrong code!'})
+            user = CustomUser.objects.get(id=user_id)
+        except CustomUser.DoesNotExist:
+            return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': 'User не найден'})
 
-        user = confirm.user
+        try:
+            confirm = ConfirmationCode.objects.get(user=user, code=code)
+        except ConfirmationCode.DoesNotExist:
+            return Response(status=status.HTTP_400_BAD_REQUEST, data={'error': 'Неверный код!'})
+
         user.is_active = True
         user.save()
         confirm.delete()
 
-        return Response(status=status.HTTP_200_OK,
-                        data={'message': 'User activated successfully!'})
+        return Response(status=status.HTTP_200_OK, data={'message': 'User activated successfully!'})
