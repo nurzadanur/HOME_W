@@ -6,6 +6,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from common.permissions import CanEdit, IsAnonymous, IsModerator, IsOwner
+from common.validators import validate_age
 
 from .models import Category, Product, Review
 from .serializers import (
@@ -87,6 +88,8 @@ class ProductListAPIView(ListCreateAPIView):
         return Response(data=data, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
+        validate_age(request)
+
         serializer = ProductValidateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 

@@ -12,6 +12,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token["email"] = user.email
         token["is_active"] = user.is_active
         token["is_staff"] = user.is_staff
+        token["birthdate"] = str(user.birthdate) if user.birthdate else None
         return token
 
 
